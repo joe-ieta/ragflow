@@ -107,3 +107,12 @@ docker compose -f docker-compose.yml up -d
   lefthook install
   lefthook run pre-commit --all-files
   ```
+
+## 6. Local Release Packaging
+When updating the local Docker release bundle under `E:\CodexDev\ragflow-release`, use the project skill `.agents/skills/ragflow-release-packaging/SKILL.md`.
+
+Key constraints:
+- Keep the release split into `ragflow-base-env` and `ragflow-app`.
+- Preserve both `linux-amd64` and `linux-arm64` offline image directories.
+- Validate image architecture before skipping `docker load`; the shared tag `ragflow-local:0.26.3` can point to either AMD64 or ARM64 after a build.
+- Re-run compose parsing and tar/platform checks after changing release scripts or images.
