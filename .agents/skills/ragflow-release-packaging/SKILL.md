@@ -60,6 +60,7 @@ Important: `--load` writes the selected platform image into the local Docker ima
 
 Windows entry points:
 
+- `ragflow-base-env/quick-start.ps1`
 - `ragflow-base-env/start-base-env.ps1`
 - `ragflow-base-env/stop-base-env.ps1`
 - `ragflow-app/start-ragflow.ps1`
@@ -88,6 +89,13 @@ Application start scripts must:
 5. Start `ragflow-app` with `docker-compose.ragflow.yml`.
 
 Windows `start-ragflow.ps1` expects `linux/amd64`. Ubuntu AMD64 expects `linux/amd64`. Ubuntu ARM64 expects `linux/arm64`.
+
+Base environment `quick-start.ps1` must be idempotent:
+
+1. If all base services are already running, only print `docker compose ps` status.
+2. If required images are already loaded, skip `docker load`.
+3. If required images are missing, delegate to `load-and-start.ps1`.
+4. If the base environment is partially running, skip port preflight and let compose converge the missing services.
 
 ## Validation Checklist
 
@@ -148,4 +156,3 @@ Stop application and base environment:
 - `infiniflow/ragflow_deps:latest` must match the target platform before building the app image.
 - ARM64 builds can expose architecture-specific issues. The Dockerfile has historical references to `chrome-linux64` and `chromedriver-linux64`; validate browser-related runtime behavior separately if browser automation features are required.
 - PowerShell here-strings can corrupt Markdown code spans if backticks are not treated carefully. Prefer UTF-8 no-BOM writes and verify generated Markdown with explicit reads.
-
