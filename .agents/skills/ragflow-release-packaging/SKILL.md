@@ -1,36 +1,106 @@
 ---
 name: ragflow-release-packaging
-description: RAGFlow local release packaging workflow for Docker-based offline base environment and application images. Use this skill when updating E:\CodexDev\ragflow-release, rebuilding AMD64 or ARM64 images, validating release completeness, or changing start/stop scripts.
+description: RAGFlow application-only local release packaging workflow. Use this skill when updating E:\CodexDev\ragflow-release, rebuilding AMD64 or ARM64 RAGFlow application images, validating release completeness, or changing start/stop scripts that integrate with E:\CodexDev\ieta-znz-deploy.
 ---
 
 # RAGFlow Release Packaging
 
-Use this skill for any change that touches the local release bundle under `E:\CodexDev\ragflow-release`, including base service images, application images, offline tar archives, and platform-specific start/stop scripts.
+Use this skill for changes that touch the local RAGFlow release bundle under `E:\CodexDev\ragflow-release`.
+
+The RAGFlow release is an **application release only**. Do not package or maintain third-party base containers here. MySQL, MinIO, Valkey, Elasticsearch 8, and other shared infrastructure containers are owned by the sibling deployment project:
+
+```text
+E:\CodexDev\ieta-znz-deploy
+```
+
+Read and follow the documents in `E:\CodexDev\ieta-znz-deploy` before changing RAGFlow release scripts. Do not modify `ieta-znz-deploy` from this project unless the user explicitly asks for work in that project.
 
 ## Release Layout
 
-The release bundle is split into two sibling directories:
+The expected RAGFlow release layout is:
 
 ```text
-E:\CodexDev\ragflow-release\
-  ragflow-base-env\
-  ragflow-app\
+E:\CodexDev\
+  ieta-znz-deploy\       # shared third-party base containers
+  ragflow-release\       # RAGFlow application release
+    docker-compose.ragflow.yml
+    .env
+    README.md
+    start-ragflow.ps1
+    stop-ragflow.ps1
+    status-ragflow.ps1
+    check-release.ps1
+    images\
+      linux-amd64\
+      linux-arm64\
+    scripts\
+      ubuntu-amd64\
+      ubuntu-arm64\
 ```
 
-`ragflow-base-env` owns infrastructure services:
+Do not recreate any RAGFlow-owned base environment release split. Historical folders may exist, but new release work should produce only RAGFlow application artifacts.
 
-- Elasticsearch: `elasticsearch:8.11.3`
-- MySQL: `mysql:8.0.39`
-- MinIO: `pgsty/minio:RELEASE.2026-03-25T00-00-00Z`
-- Redis-compatible Valkey: `valkey/valkey:8`
+## Base Environment Contract
 
-`ragflow-app` owns the RAGFlow application image:
+RAGFlow depends on the `ragflow` application manifest in `ieta-znz-deploy`:
 
-- Runtime image name: `ragflow-local:0.26.3`
-- AMD64 tar: `ragflow-app/images/linux-amd64/ragflow-local_0.26.3.tar`
-- ARM64 tar: `ragflow-app/images/linux-arm64/ragflow-local_0.26.3.tar`
+```text
+E:\CodexDev\ieta-znz-deploy\apps\ragflow.env
+```
 
-Both platforms intentionally reuse the same runtime image tag. Start scripts must validate the local image architecture before skipping `docker load`.
+Required base capabilities:
+
+- `mysql`
+- `minio`
+- `valkey`
+- `es8`
+
+Expected shared Docker network:
+
+```text
+ieta-znz-deploy
+```
+
+RAGFlow application containers must join this network as an external network. They must use base service names, not host ports, for container-to-container connections.
+
+RAGFlow-compatible service values:
+
+```text
+MYSQL_HOST=mysql8
+MYSQL_PORT=3306
+MYSQL_DBNAME=rag_flow
+MYSQL_USER=rag_flow
+MYSQL_PASSWORD=infini_rag_flow
+MINIO_HOST=minio
+MINIO_USER=ieta_admin
+MINIO_PASSWORD=infini_rag_flow
+REDIS_HOST=valkey
+REDIS_PORT=6379
+REDIS_PASSWORD=infini_rag_flow
+ES_HOST=es8-ragflow
+ELASTIC_PASSWORD=infini_rag_flow
+```
+
+Important: `docker/service_conf.yaml.template` appends ports and schemes for some values. Do not set `MINIO_HOST=minio:9000` or `ES_HOST=http://es8-ragflow:9200` in the RAGFlow app `.env`, because that produces malformed values such as `minio:9000:9000` or `http://http://...:9200`.
+
+If `ieta-znz-deploy` has an incompatible template for RAGFlow, document it as an optimization suggestion in the RAGFlow release notes. Do not silently edit `ieta-znz-deploy`.
+
+## Application Image
+
+Runtime image name:
+
+```text
+ragflow-local:0.26.3
+```
+
+Platform tar files:
+
+```text
+ragflow-release/images/linux-amd64/ragflow-local_0.26.3.tar
+ragflow-release/images/linux-arm64/ragflow-local_0.26.3.tar
+```
+
+Both platforms intentionally reuse the same runtime image tag. Start scripts must validate local image architecture before skipping `docker load`.
 
 ## Build Order
 
@@ -42,7 +112,7 @@ For AMD64:
 cd E:\CodexDev\ragflow
 docker buildx build --platform linux/amd64 -f ragflow_deps/Dockerfile -t infiniflow/ragflow_deps:latest --load ragflow_deps
 docker buildx build --platform linux/amd64 -t ragflow-local:0.26.3 --load .
-docker save -o E:\CodexDev\ragflow-release\ragflow-app\images\linux-amd64\ragflow-local_0.26.3.tar ragflow-local:0.26.3
+docker save --platform linux/amd64 -o E:\CodexDev\ragflow-release\images\linux-amd64\ragflow-local_0.26.3.tar ragflow-local:0.26.3
 ```
 
 For ARM64:
@@ -51,7 +121,7 @@ For ARM64:
 cd E:\CodexDev\ragflow
 docker buildx build --platform linux/arm64 -f ragflow_deps/Dockerfile -t infiniflow/ragflow_deps:latest --load ragflow_deps
 docker buildx build --platform linux/arm64 -t ragflow-local:0.26.3 --load .
-docker save -o E:\CodexDev\ragflow-release\ragflow-app\images\linux-arm64\ragflow-local_0.26.3.tar ragflow-local:0.26.3
+docker save --platform linux/arm64 -o E:\CodexDev\ragflow-release\images\linux-arm64\ragflow-local_0.26.3.tar ragflow-local:0.26.3
 ```
 
 Important: `--load` writes the selected platform image into the local Docker image store. After building ARM64, `ragflow-local:0.26.3` and `infiniflow/ragflow_deps:latest` may point to ARM64 on an AMD64 host. This is expected, but start scripts must reload the correct platform tar before running.
@@ -60,50 +130,47 @@ Important: `--load` writes the selected platform image into the local Docker ima
 
 Windows entry points:
 
-- `ragflow-base-env/quick-start.ps1`
-- `ragflow-base-env/start-base-env.ps1`
-- `ragflow-base-env/stop-base-env.ps1`
-- `ragflow-app/start-ragflow.ps1`
-- `ragflow-app/stop-ragflow.ps1`
+- `start-ragflow.ps1`
+- `stop-ragflow.ps1`
+- `status-ragflow.ps1`
+- `check-release.ps1`
 
 Ubuntu AMD64 entry points:
 
-- `ragflow-base-env/scripts/ubuntu-amd64/start.sh`
-- `ragflow-base-env/scripts/ubuntu-amd64/stop.sh`
-- `ragflow-app/scripts/ubuntu-amd64/start.sh`
-- `ragflow-app/scripts/ubuntu-amd64/stop.sh`
+- `scripts/ubuntu-amd64/start.sh`
+- `scripts/ubuntu-amd64/stop.sh`
+- `scripts/ubuntu-amd64/status.sh`
 
 Ubuntu ARM64 entry points:
 
-- `ragflow-base-env/scripts/ubuntu-arm64/start.sh`
-- `ragflow-base-env/scripts/ubuntu-arm64/stop.sh`
-- `ragflow-app/scripts/ubuntu-arm64/start.sh`
-- `ragflow-app/scripts/ubuntu-arm64/stop.sh`
+- `scripts/ubuntu-arm64/start.sh`
+- `scripts/ubuntu-arm64/stop.sh`
+- `scripts/ubuntu-arm64/status.sh`
 
 Application start scripts must:
 
-1. Check whether base services `es01`, `mysql`, `minio`, and `redis` are already running under compose project `ragflow-base-env`.
-2. Start the base environment only when required.
-3. Check local `ragflow-local:0.26.3` architecture.
-4. Load the matching platform tar if the image is missing or has the wrong architecture.
-5. Start `ragflow-app` with `docker-compose.ragflow.yml`.
+1. Locate sibling `ieta-znz-deploy` relative to `ragflow-release` or allow an override parameter.
+2. Call the `ieta-znz-deploy` app-base start entry for `ragflow`.
+3. Check that required base services are running: `mysql8`, `minio`, `valkey`, and `es8-ragflow`.
+4. Check local `ragflow-local:0.26.3` architecture.
+5. Load the matching platform tar only when the image is missing or has the wrong architecture.
+6. Start RAGFlow with `docker-compose.ragflow.yml`.
 
-Windows `start-ragflow.ps1` expects `linux/amd64`. Ubuntu AMD64 expects `linux/amd64`. Ubuntu ARM64 expects `linux/arm64`.
-
-Base environment `quick-start.ps1` must be idempotent:
-
-1. If all base services are already running, only print `docker compose ps` status.
-2. If required images are already loaded, skip `docker load`.
-3. If required images are missing, delegate to `load-and-start.ps1`.
-4. If the base environment is partially running, skip port preflight and let compose converge the missing services.
+Stop scripts must stop only RAGFlow application containers by default. They must not stop or remove shared `ieta-znz-deploy` services unless a clearly named explicit flag is used and documented.
 
 ## Validation Checklist
 
-Run these checks after every release update:
+Run this check after every release update:
 
 ```powershell
-docker compose --project-name ragflow-base-env -f E:\CodexDev\ragflow-release\ragflow-base-env\docker-compose.base-env.yml config --quiet
-docker compose --project-name ragflow-app -f E:\CodexDev\ragflow-release\ragflow-app\docker-compose.ragflow.yml config --quiet
+docker compose --project-name ragflow-app -f E:\CodexDev\ragflow-release\docker-compose.ragflow.yml config --quiet
+```
+
+Check base environment integration:
+
+```powershell
+cd E:\CodexDev\ieta-znz-deploy
+.\status-app-base.ps1 -App ragflow
 ```
 
 Check image metadata:
@@ -112,44 +179,24 @@ Check image metadata:
 docker image inspect ragflow-local:0.26.3 --format "id={{.Id}} os={{.Os}} arch={{.Architecture}} size={{.Size}} entrypoint={{json .Config.Entrypoint}} workdir={{.Config.WorkingDir}}"
 ```
 
-Check application tar platform metadata by reading the OCI index. The AMD64 application tar must include a `linux/amd64` manifest; the ARM64 application tar must include a `linux/arm64` manifest.
-
 Check hashes:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath E:\CodexDev\ragflow-release\ragflow-app\images\linux-amd64\ragflow-local_0.26.3.tar
-Get-FileHash -Algorithm SHA256 -LiteralPath E:\CodexDev\ragflow-release\ragflow-app\images\linux-arm64\ragflow-local_0.26.3.tar
-```
-
-For AMD64 runtime validation on Windows:
-
-```powershell
-cd E:\CodexDev\ragflow-release\ragflow-app
-.\start-ragflow.ps1
+Get-FileHash -Algorithm SHA256 -LiteralPath E:\CodexDev\ragflow-release\images\linux-amd64\ragflow-local_0.26.3.tar
+Get-FileHash -Algorithm SHA256 -LiteralPath E:\CodexDev\ragflow-release\images\linux-arm64\ragflow-local_0.26.3.tar
 ```
 
 Expected runtime signs:
 
-- Base services healthy: Elasticsearch, MySQL, MinIO, Redis.
+- `ieta-znz-deploy` services for RAGFlow are running: MySQL, MinIO, Valkey, Elasticsearch 8.
 - `ragflow-app` is running.
 - Logs show `RAGFlow server is ready`.
-- Web UI responds with HTTP 200 at `http://127.0.0.1:8080`.
+- Web UI responds with HTTP 200 at `http://127.0.0.1:8080` or the configured web port.
 - API port `9380` is listening. The root path may return HTTP 404 because no root route is defined.
-
-Stop application only:
-
-```powershell
-.\stop-ragflow.ps1
-```
-
-Stop application and base environment:
-
-```powershell
-.\stop-ragflow.ps1 -StopBase
-```
 
 ## Known Pitfalls
 
+- Do not package MySQL, MinIO, Valkey, Elasticsearch, or other third-party base images under `ragflow-release`.
 - Do not rely on image tag existence alone. `ragflow-local:0.26.3` may point to either AMD64 or ARM64 depending on the most recent `docker load` or `buildx --load`.
 - Do not overwrite unrelated files in `E:\CodexDev\ragflow-release`; this folder is outside the repo workspace and changes require explicit filesystem approval.
 - The app image is large. Avoid unconditional `docker load` in start scripts; load only when the image is missing or has the wrong architecture.

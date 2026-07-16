@@ -112,7 +112,9 @@ docker compose -f docker-compose.yml up -d
 When updating the local Docker release bundle under `E:\CodexDev\ragflow-release`, use the project skill `.agents/skills/ragflow-release-packaging/SKILL.md`.
 
 Key constraints:
-- Keep the release split into `ragflow-base-env` and `ragflow-app`.
-- Preserve both `linux-amd64` and `linux-arm64` offline image directories.
+- `E:\CodexDev\ragflow-release` is an application release only. Do not publish MySQL, MinIO, Valkey, Elasticsearch, or other third-party base containers from this project.
+- Shared third-party base containers are provided by the sibling deployment project `E:\CodexDev\ieta-znz-deploy`; follow its documents and scripts without modifying that project from this repository.
+- RAGFlow release scripts must check/start the required base capabilities through `ieta-znz-deploy` before starting the RAGFlow application container.
+- Preserve both `linux-amd64` and `linux-arm64` application image directories when packaging RAGFlow images.
 - Validate image architecture before skipping `docker load`; the shared tag `ragflow-local:0.26.3` can point to either AMD64 or ARM64 after a build.
-- Re-run compose parsing and tar/platform checks after changing release scripts or images.
+- Re-run compose parsing and tar/platform checks after changing release scripts or application images.
