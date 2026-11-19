@@ -1,0 +1,20 @@
+{
+  "payment_request_line_id": "P-204/1",
+  "milestone_id": "C-17/M2",
+  "rule_version": "M2-v2",
+  "evaluated_at": "2026-11-19T09:00:00+08:00",
+  "decision": "pending_documents",
+  "checks": [
+    {
+      "requirement_id": "inspection_passed",
+      "status": "satisfied",
+      "source_refs": ["quality:acceptance/B-03"]
+    },
+    {
+      "requirement_id": "signed_acceptance_report",
+      "status": "missing",
+      "source_refs": ["contract:C-17/amendment-v2/article-4"]
+    }
+  ],
+  "next_role": "quality_officer"
+}

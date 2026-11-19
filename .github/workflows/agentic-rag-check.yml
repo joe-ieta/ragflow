@@ -1,0 +1,21 @@
+name: Agentic RAG checks
+
+on:
+  push:
+    branches: [agentic-rag]
+  pull_request:
+    branches: [agentic-rag]
+
+permissions:
+  contents: read
+
+jobs:
+  scaffold:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Validate the development scaffold
+        shell: pwsh
+        run: ./tools/agentic-rag/check.ps1
